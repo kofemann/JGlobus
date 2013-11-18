@@ -22,6 +22,7 @@ import org.apache.commons.logging.Log;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import org.globus.common.CoGProperties;
 
 import org.globus.util.GlobusResource;
 import org.globus.util.GlobusPathMatchingResourcePatternResolver;
@@ -43,11 +44,14 @@ public abstract class AbstractResourceSecurityWrapper<T> implements
 	private boolean changed;
 	private T securityObject;
 	private long lastModified = -1;
+        private long lastRefreshed;
+        private final long cacheLifetime;
 	private String alias;
 	private boolean inMemory = false;
 
 	protected AbstractResourceSecurityWrapper(boolean inMemory) {
 		this.inMemory = inMemory;
+                this.cacheLifetime = CoGProperties.getDefault().getCertCacheLifetime();
 	}
 
 	protected void init(String locationPattern) throws ResourceStoreException {
@@ -117,21 +121,27 @@ public abstract class AbstractResourceSecurityWrapper<T> implements
 	}
 
 	public void refresh() throws ResourceStoreException {
-		if(!inMemory){
-			this.changed = false;
-			long latestLastModified;
-			try {
-				latestLastModified = this.globusResource.lastModified();
-			} catch (IOException e) {
-				throw new ResourceStoreException(e);
-			}
-			if (this.lastModified < latestLastModified) {
-				this.securityObject = create(this.globusResource);
-				this.lastModified = latestLastModified;
-				this.changed = true;
-			}
-		}
-	}
+            if (!inMemory) {
+                synchronized (this) {
+                    long now = System.currentTimeMillis();
+                    if (this.lastRefreshed + this.cacheLifetime < now) {
+                        this.changed = false;
+                        long latestLastModified;
+                        try {
+                            latestLastModified = this.globusResource.lastModified();
+                        } catch (IOException e) {
+                            throw new ResourceStoreException(e);
+                        }
+                        if (this.lastModified < latestLastModified) {
+                            this.securityObject = create(this.globusResource);
+                            this.lastModified = latestLastModified;
+                            this.changed = true;
+                        }
+                        this.lastRefreshed = now;
+                    }
+                }
+            }
+    }
 
     protected abstract T create(GlobusResource targetResource)
             throws ResourceStoreException;
