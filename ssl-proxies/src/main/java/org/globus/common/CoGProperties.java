@@ -735,7 +735,7 @@ public class CoGProperties extends Properties {
     }
     
     protected final static boolean isNullOrEmpty(String tmp) {
-	return (tmp == null || (tmp != null && tmp.length() == 0));
+	return tmp == null || tmp.isEmpty();
     }
     
 }
